@@ -1,0 +1,37 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: transaction-authorization
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: authorization-result-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+    streams:
+      application-id: authorization-streams
+      default-key-serde: org.apache.kafka.common.serialization.Serdes$StringSerde
+      default-value-serde: org.apache.kafka.common.serialization.Serdes$StringSerde
+  datasource:
+    url: jdbc:postgresql://localhost:5432/authorization
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+kafka:
+  topics:
+    requests: authorization-requests
+    approved: authorization-approved
+    denied: authorization-denied
+    dlq: authorization-dlq
+
+logging:
+  level:
+    com.example.authorization: DEBUG
+    org.apache.kafka: WARN
