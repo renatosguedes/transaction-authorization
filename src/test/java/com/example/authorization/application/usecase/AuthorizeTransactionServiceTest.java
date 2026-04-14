@@ -13,9 +13,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -109,29 +111,70 @@ class AuthorizeTransactionServiceTest {
     }
 
     @Test
-    void should_return_denied_with_timeout_reason_when_streams_does_not_respond() {
-        // Future that never completes — simulates timeout
-        when(registry.register("txn-001")).thenReturn(new CompletableFuture<>());
+    void should_deny_immediately_without_publishing_when_amount_exceeds_limit() {
+        Transaction overLimit = new Transaction(
+                "txn-001", "acc-123", "merchant-1",
+                Money.of(new BigDecimal("50000.01"), "BRL"), Instant.now());
 
-        // Override timeout to 0 for test speed
-        var fastService = new AuthorizeTransactionService(eventPublisher, registry) {
-            @Override
-            public AuthorizationResult authorize(Transaction transaction) {
-                registry.register(transaction.transactionId());
-                eventPublisher.publish(transaction);
-                try {
-                    return new CompletableFuture<AuthorizationResult>()
-                            .get(0, java.util.concurrent.TimeUnit.MILLISECONDS);
-                } catch (java.util.concurrent.TimeoutException e) {
-                    registry.remove(transaction.transactionId());
-                    return AuthorizationResult.denied(transaction, "Authorization timed out");
-                } catch (Exception e) {
-                    return AuthorizationResult.denied(transaction, "Authorization error");
-                }
-            }
-        };
+        AuthorizationResult result = service.authorize(overLimit);
 
-        AuthorizationResult result = fastService.authorize(validTransaction);
+        assertThat(result.status()).isEqualTo(AuthorizationResult.Status.DENIED);
+        verifyNoInteractions(eventPublisher);
+        verifyNoInteractions(registry);
+    }
+
+    @Test
+    void should_return_denied_when_execution_exception_occurs() {
+        when(registry.register("txn-001"))
+                .thenReturn(CompletableFuture.failedFuture(new RuntimeException("downstream failure")));
+
+        AuthorizationResult result = service.authorize(validTransaction);
+
+        assertThat(result.status()).isEqualTo(AuthorizationResult.Status.DENIED);
+    }
+
+    @Test
+    void should_remove_registry_entry_when_execution_exception_occurs() {
+        when(registry.register("txn-001"))
+                .thenReturn(CompletableFuture.failedFuture(new RuntimeException("downstream failure")));
+
+        service.authorize(validTransaction);
+
+        verify(registry).remove("txn-001");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void should_return_denied_when_interrupted() throws Exception {
+        CompletableFuture<AuthorizationResult> future = mock(CompletableFuture.class);
+        when(future.get(anyLong(), any(TimeUnit.class))).thenThrow(new InterruptedException());
+        when(registry.register("txn-001")).thenReturn(future);
+
+        AuthorizationResult result = service.authorize(validTransaction);
+
+        assertThat(result.status()).isEqualTo(AuthorizationResult.Status.DENIED);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void should_remove_registry_entry_when_interrupted() throws Exception {
+        CompletableFuture<AuthorizationResult> future = mock(CompletableFuture.class);
+        when(future.get(anyLong(), any(TimeUnit.class))).thenThrow(new InterruptedException());
+        when(registry.register("txn-001")).thenReturn(future);
+
+        service.authorize(validTransaction);
+
+        verify(registry).remove("txn-001");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void should_return_denied_with_timeout_reason_when_streams_does_not_respond() throws Exception {
+        CompletableFuture<AuthorizationResult> future = mock(CompletableFuture.class);
+        when(future.get(anyLong(), any(TimeUnit.class))).thenThrow(new java.util.concurrent.TimeoutException());
+        when(registry.register("txn-001")).thenReturn(future);
+
+        AuthorizationResult result = service.authorize(validTransaction);
 
         assertThat(result.status()).isEqualTo(AuthorizationResult.Status.DENIED);
         assertThat(result.reason()).isEqualTo("Authorization timed out");
