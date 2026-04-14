@@ -42,8 +42,8 @@ never sees.
 │    2. TransactionEventPublisher.publish()  (port)                    │
 │    3. PendingAuthorizationRegistry.await()  (CompletableFuture)      │
 └──────┬──────────────────────────────────────────┬────────────────────┘
-       │ publish event                             │ await result (≤5 s)
-       ▼                                           ▲
+       │ publish event                            │ await result (≤5 s)
+       ▼                                          ▲
 ┌─────────────────────────────────┐   ┌────────────────────────────────┐
 │  infrastructure / kafka         │   │  infrastructure / kafka        │
 │  producer                       │   │  consumer                      │
