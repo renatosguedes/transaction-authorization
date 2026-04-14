@@ -10,22 +10,29 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Service
 public class AuthorizeTransactionService implements AuthorizeTransactionUseCase {
 
+    static final long RESULT_TIMEOUT_SECONDS = 5;
+
     private final TransactionEventPublisher eventPublisher;
+    private final PendingAuthorizationRegistry registry;
     private final List<AuthorizationPolicy> policies;
 
-    public AuthorizeTransactionService(TransactionEventPublisher eventPublisher) {
+    public AuthorizeTransactionService(TransactionEventPublisher eventPublisher,
+                                       PendingAuthorizationRegistry registry) {
         this.eventPublisher = eventPublisher;
-        // Políticas stateless — a stateful (rate limit) roda no Kafka Streams
+        this.registry = registry;
         this.policies = List.of(new AmountValidationPolicy());
     }
 
     @Override
     public AuthorizationResult authorize(Transaction transaction) {
-        // Avalia todas as políticas stateless
         Optional<AuthorizationResult> denial = policies.stream()
                 .map(policy -> policy.evaluate(transaction))
                 .filter(Optional::isPresent)
@@ -36,10 +43,22 @@ public class AuthorizeTransactionService implements AuthorizeTransactionUseCase 
             return denial.get();
         }
 
-        // Passou nas validações stateless: publica no Kafka para processamento stateful
+        // Register future before publishing to avoid a race with a very fast consumer
+        CompletableFuture<AuthorizationResult> future = registry.register(transaction.transactionId());
         eventPublisher.publish(transaction);
 
-        // Retorna PENDING — o resultado final vem do Kafka Streams
-        return AuthorizationResult.approved(transaction); // simplificado para o MVP
+        try {
+            return future.get(RESULT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            registry.remove(transaction.transactionId());
+            return AuthorizationResult.denied(transaction, "Authorization timed out");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            registry.remove(transaction.transactionId());
+            return AuthorizationResult.denied(transaction, "Authorization interrupted");
+        } catch (ExecutionException e) {
+            registry.remove(transaction.transactionId());
+            return AuthorizationResult.denied(transaction, "Authorization error");
+        }
     }
 }
