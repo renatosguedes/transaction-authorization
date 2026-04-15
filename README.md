@@ -192,7 +192,8 @@ curl -X POST http://localhost:8081/api/v1/authorize \
 
 The endpoint is **synchronous** — it blocks for up to 5 seconds waiting for the Kafka Streams
 decision and returns the real result. A timeout returns `DENIED` with reason
-`"Authorization timed out"`.
+`"Authorization timed out"`. This design eliminates the need for client-side polling: the caller
+receives the final decision in a single request, just like any ordinary REST call.
 
 ---
 
@@ -206,5 +207,6 @@ mvn verify
 open target/site/jacoco/index.html
 ```
 
-Unit tests use JUnit 5 + Mockito. Topology tests use `TopologyTestDriver` — no real Kafka
-broker, no `@SpringBootTest`, no Testcontainers required.
+Unit tests use JUnit 5 + Mockito. Topology tests use `TopologyTestDriver` — an in-process
+test harness that runs the full Kafka Streams topology (including state stores and windowed
+aggregations) without a real broker, no `@SpringBootTest`, no Testcontainers required.
