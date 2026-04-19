@@ -6,7 +6,7 @@ topology — returning the real authorization decision to the caller.
 
 ## Stack
 
-- Java 21 (LTS)
+- Java 25 (LTS)
 - Spring Boot 3.x
 - Spring Kafka + Kafka Streams
 - PostgreSQL (result persistence via JPA + Flyway)
@@ -138,7 +138,7 @@ topic creation to `docker-compose.yml`.
 
 ## Running Locally
 
-**Prerequisites:** Docker, Docker Compose, Java 21, Maven (via sdkman or system install).
+**Prerequisites:** Docker, Docker Compose, Java 25, Maven (via sdkman or system install).
 
 ```bash
 # 1. Start infrastructure (Kafka, Zookeeper, PostgreSQL, Kafka UI)
