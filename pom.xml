@@ -21,7 +21,7 @@
     <description>Microsserviço de autorização de transações financeiras com Kafka Streams</description>
 
     <properties>
-        <java.version>21</java.version>
+        <java.version>25</java.version>
         <kafka.streams.version>3.9.0</kafka.streams.version>
     </properties>
 
@@ -102,6 +102,18 @@
 
     </dependencies>
 
+    <dependencyManagement>
+        <dependencies>
+            <!-- Override Spring Boot BOM: Mockito 5.17+ bundles ByteBuddy 1.17.x
+                 which supports Java 25 class file version 69 natively. -->
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <version>5.17.0</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <build>
         <plugins>
             <plugin>
@@ -120,13 +132,13 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <!-- @{argLine} is resolved at runtime so JaCoCo's agent is included -->
-                    <argLine>@{argLine} -Dnet.bytebuddy.experimental=true</argLine>
+                    <argLine>@{argLine}</argLine>
                 </configuration>
             </plugin>
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.12</version>
+                <version>0.8.13</version>
                 <executions>
                     <execution>
                         <goals>
